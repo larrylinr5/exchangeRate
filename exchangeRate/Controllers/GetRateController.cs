@@ -1,16 +1,80 @@
-﻿using exchangeRate.Models;
+﻿using Dapper;
+using exchangeRate.Models;
+using Microsoft.Ajax.Utilities;
 using System;
 using System.Collections.Generic;
+using System.Data;
+using System.Data.SqlClient;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
 using System.Web;
 using System.Web.Http;
 
+
 namespace exchangeRate.Controllers
 {
     public class GetRateController : ApiController
     {
+        /// <summary>
+        /// 連線字串
+        /// </summary>
+        private readonly string _connectString = @"Persist Security Info=False;Trusted_Connection=True;database=exchangeRate;server=(local)";
+
+        public IEnumerable<exchangeRatesVM> GetList()
+        {
+            using (var conn = new SqlConnection(_connectString))
+            {
+                var result = conn.Query<exchangeRatesVM>("SELECT * FROM exchangeRates");
+                return result;
+            }
+        }
+
+        public Boolean UpdateList(string currencyId, string currencyName)
+        {
+            using (var conn = new SqlConnection(_connectString))
+            {
+                string sql = @"UPDATE exchangeRates
+                                SET currencyId=@currencyId, currencyName=@currencyName
+                                WHERE currencyId=@currencyId;";
+                //設定參數
+                DynamicParameters parameters = new DynamicParameters();
+                parameters.Add("@currencyId", currencyId, DbType.String, ParameterDirection.Input);
+                parameters.Add("@currencyName", currencyName, DbType.String, ParameterDirection.Input);
+                var result = conn.Execute(sql, parameters);
+                return true;
+            }
+        }
+
+        public Boolean InsertList(string currencyId, string currencyName)
+        {
+            using (var conn = new SqlConnection(_connectString))
+            {
+                string sql = @"INSERT INTO exchangeRates 
+                                        (currencyId, currencyName,cashSale,cashBuy,lastUpdateTime)
+                                 VALUES (@currencyId, @currencyName,0,0,'');";
+                //設定參數
+                DynamicParameters parameters = new DynamicParameters();
+                parameters.Add("@currencyId", currencyId, DbType.String, ParameterDirection.Input);
+                parameters.Add("@currencyName", currencyName, DbType.String, ParameterDirection.Input);
+                var result = conn.Execute(sql, parameters);
+                return true;
+            }
+        }
+
+        public void DeleteList(string currencyId)
+        {
+            using (var conn = new SqlConnection(_connectString))
+            {
+                string sql = @"DELETE FROM exchangeRates
+                                WHERE currencyId = @currencyId;";
+                //設定參數
+                DynamicParameters parameters = new DynamicParameters();
+                parameters.Add("@currencyId", currencyId, DbType.String, ParameterDirection.Input);
+                conn.Execute(sql, parameters);
+            }
+        }
+
         // GET api/values
         public IEnumerable<string> Get()
         {
@@ -28,45 +92,12 @@ namespace exchangeRate.Controllers
         // POST api/values
         public dynamic Post([FromBody] dynamic value)
         {
-            #region 假資料
-            List<exchangeRatesVM> exchangeRatesDataList = new List<exchangeRatesVM>();
-            exchangeRatesDataList.Add(new exchangeRatesVM()
-            {
-                currencyId = "USD",
-                currencyName = "美金",
-                cashSale = 29.4580,
-                cashBuy = 29.3580,
-                lastUpdateTime = "20200606150000"
-            });
-
-            exchangeRatesDataList.Add(new exchangeRatesVM()
-            {
-                currencyId = "JYP",
-                currencyName = "日圓",
-                cashSale = 0.2752,
-                cashBuy = 0.2712,
-                lastUpdateTime = "20200606150000"
-            });
-
-            List<currencyVM> currencyDataList = new List<currencyVM>();
-            currencyDataList.Add(new currencyVM()
-            {
-                currencyId = "TWD",
-                currencyName = "台幣",
-            });
-            currencyDataList.Add(new currencyVM()
-            {
-                currencyId = "USD",
-                currencyName = "美金",
-            });
-            #endregion
-
             //取得幣別列表
             if (value?.currencyId == null && value?.exchangeDate == null)
             {
                 List<currencyVM> ResList = new List<currencyVM>();
-
-                currencyDataList.ForEach(x =>
+                var res = GetList();
+                res.ForEach(x =>
                 {
                     currencyVM Res = new currencyVM();
                     Res.currencyId = x.currencyId;
@@ -81,28 +112,30 @@ namespace exchangeRate.Controllers
             if (value?.currencyId != null && value?.currencyName != null)
             {
                 bool checkExist = true;
-                int index = 0;
+                var res = GetList();
                 // 修改
-                currencyDataList.ForEach(x =>
+                res.ForEach(x =>
                 {
-                    if (value?.currencyId == x.currencyId)
+                    if (value?.currencyId == x.currencyId.Trim())
                     {
-                        currencyDataList[index].currencyName = value.currencyName;
                         checkExist = false;
                     }
-                    index++;
                 });
+                if (!checkExist)
+                {
+                    string UpdateCurrencyId = value.currencyId;
+                    string UpdateCurrencyName = value.currencyName;
+                    UpdateList(UpdateCurrencyId, UpdateCurrencyName);
+                } 
                 // 新增
                 if (checkExist)
                 {
-                    currencyDataList.Add(new currencyVM()
-                    {
-                        currencyId = value.currencyId,
-                        currencyName = value.currencyName
-                    });
+                    string UpdateCurrencyId = value.currencyId;
+                    string UpdateCurrencyName = value.currencyName;
+                    InsertList(UpdateCurrencyId, UpdateCurrencyName);
                 }
 
-                return currencyDataList;
+                return true;
             }
 
             // 刪除幣別
@@ -110,19 +143,20 @@ namespace exchangeRate.Controllers
             {
                 int removwIndex = 0;
                 bool removeFlag = false;
-                int index = 0;
-                // 修改
-                currencyDataList.ForEach(x =>
+                var res = GetList();
+                res.ForEach(x =>
                 {
-                    if (value?.currencyId == x.currencyId)
+                    if (value?.currencyId == x.currencyId.Trim())
                     {
-                        removwIndex = index;
                         removeFlag = true;
                     }
-                    index++;
                 });
-                if(removeFlag) currencyDataList.RemoveAt(removwIndex);
-                return currencyDataList;
+                if (removeFlag) 
+                {
+                    string UpdateCurrencyId = value.currencyId;
+                    DeleteList(UpdateCurrencyId);
+                }
+                return true;
             }
 
             // 取得某日匯率
@@ -130,12 +164,13 @@ namespace exchangeRate.Controllers
             {
                 try
                 {
+                    var res = GetList();
                     string date = value.exchangeDate;
                     date = date.Replace("/", "");
 
                     List<exchangeRatesVM> ResList = new List<exchangeRatesVM>();
 
-                    exchangeRatesDataList.ForEach(x =>
+                    res.ForEach(x =>
                     {
                         if (x.lastUpdateTime.Substring(0, 8) == date) ResList.Add(x);
                     });

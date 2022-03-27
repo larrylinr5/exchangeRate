@@ -7,6 +7,8 @@ namespace exchangeRate.Models
 {
     public class exchangeRatesVM
     {
+        
+
         public string currencyId { get; set; }
         public string currencyName { get; set; }
         public double cashSale { get; set; }
