@@ -18,9 +18,15 @@ namespace exchangeRate
             // Web API 路由
             config.MapHttpAttributeRoutes();
 
+            //config.Routes.MapHttpRoute(
+            //    name: "test",
+            //    routeTemplate: "api/{controller}/{action}/{id}",
+            //     defaults: new { controller = "GetRate" , action = "test" }
+            //);
+
             config.Routes.MapHttpRoute(
                 name: "DefaultApi",
-                routeTemplate: "api/{controller}/{id}",
+                routeTemplate: "api/{controller}/{action}/{id}",
                 defaults: new { id = RouteParameter.Optional }
             );
         }

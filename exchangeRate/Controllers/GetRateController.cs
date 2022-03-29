@@ -21,7 +21,16 @@ namespace exchangeRate.Controllers
         /// </summary>
         private readonly string _connectString = @"Persist Security Info=False;Trusted_Connection=True;database=exchangeRate;server=(local)";
 
-        public IEnumerable<exchangeRatesVM> GetList()
+        public IEnumerable<currencyVM> GetCurrency()
+        {
+            using (var conn = new SqlConnection(_connectString))
+            {
+                var result = conn.Query<currencyVM>("SELECT * FROM currency");
+                return result;
+            }
+        }
+
+        public IEnumerable<exchangeRatesVM> GetExchangeRates()
         {
             using (var conn = new SqlConnection(_connectString))
             {
@@ -30,11 +39,11 @@ namespace exchangeRate.Controllers
             }
         }
 
-        public Boolean UpdateList(string currencyId, string currencyName)
+        public Boolean UpdateCurrency(string currencyId, string currencyName)
         {
             using (var conn = new SqlConnection(_connectString))
             {
-                string sql = @"UPDATE exchangeRates
+                string sql = @"UPDATE currency
                                 SET currencyId=@currencyId, currencyName=@currencyName
                                 WHERE currencyId=@currencyId;";
                 //設定參數
@@ -46,13 +55,13 @@ namespace exchangeRate.Controllers
             }
         }
 
-        public Boolean InsertList(string currencyId, string currencyName)
+        public Boolean InsertCurrency(string currencyId, string currencyName)
         {
             using (var conn = new SqlConnection(_connectString))
             {
-                string sql = @"INSERT INTO exchangeRates 
-                                        (currencyId, currencyName,cashSale,cashBuy,lastUpdateTime)
-                                 VALUES (@currencyId, @currencyName,0,0,'');";
+                string sql = @"INSERT INTO currency 
+                                        (currencyId, currencyName)
+                                 VALUES (@currencyId, @currencyName);";
                 //設定參數
                 DynamicParameters parameters = new DynamicParameters();
                 parameters.Add("@currencyId", currencyId, DbType.String, ParameterDirection.Input);
@@ -62,16 +71,17 @@ namespace exchangeRate.Controllers
             }
         }
 
-        public void DeleteList(string currencyId)
+        public Boolean DeleteCurrency(string currencyId)
         {
             using (var conn = new SqlConnection(_connectString))
             {
-                string sql = @"DELETE FROM exchangeRates
+                string sql = @"DELETE FROM currency
                                 WHERE currencyId = @currencyId;";
                 //設定參數
                 DynamicParameters parameters = new DynamicParameters();
                 parameters.Add("@currencyId", currencyId, DbType.String, ParameterDirection.Input);
                 conn.Execute(sql, parameters);
+                return true;
             }
         }
 
@@ -89,102 +99,116 @@ namespace exchangeRate.Controllers
             return new string[] { "value1", "value2" };
         }
 
-        // POST api/values
-        public dynamic Post([FromBody] dynamic value)
+        //取得幣別列表
+        [HttpPost]
+        [ActionName("getData")]
+        public dynamic getData([FromBody] dynamic value) 
         {
-            //取得幣別列表
-            if (value?.currencyId == null && value?.exchangeDate == null)
+            return GetCurrency();
+        }
+
+        // 新增幣別
+        [HttpPost]
+        [ActionName("createData")]
+        public dynamic createData([FromBody] dynamic value)
+        {
+            bool checkExist = true;
+            var res = GetCurrency();
+            // 修改
+            res.ForEach(x =>
             {
-                List<currencyVM> ResList = new List<currencyVM>();
-                var res = GetList();
+                if (value?.currencyId == x.currencyId.Trim())
+                {
+                    checkExist = false;
+                }
+            });
+            if (!checkExist)
+            {
+                return "已存在此currencyId";
+            }
+            else
+            {
+                string UpdateCurrencyId = value.currencyId;
+                string UpdateCurrencyName = value.currencyName;
+                return InsertCurrency(UpdateCurrencyId, UpdateCurrencyName);
+            }
+        }
+
+        // 修改幣別
+        [HttpPost]
+        [ActionName("updateData")]
+        public dynamic updateData([FromBody] dynamic value)
+        {
+            bool checkExist = true;
+            var res = GetCurrency();
+            // 修改
+            res.ForEach(x =>
+            {
+                if (value?.currencyId == x.currencyId.Trim())
+                {
+                    checkExist = false;
+                }
+            });
+            if (!checkExist)
+            {
+                string UpdateCurrencyId = value.currencyId;
+                string UpdateCurrencyName = value.currencyName;
+                return UpdateCurrency(UpdateCurrencyId, UpdateCurrencyName);
+            }
+            else
+            {
+                return "無此資料可提供修改";
+            }
+        }
+
+        // 刪除幣別
+        [HttpPost]
+        [ActionName("deleteData")]
+        public dynamic deleteData([FromBody] dynamic value)
+        {
+            int removwIndex = 0;
+            bool removeFlag = false;
+            var res = GetCurrency();
+            res.ForEach(x =>
+            {
+                if (value?.currencyId == x.currencyId.Trim())
+                {
+                    removeFlag = true;
+                }
+            });
+            if (removeFlag)
+            {
+                string UpdateCurrencyId = value.currencyId;
+                return DeleteCurrency(UpdateCurrencyId);
+            }
+            return "刪除失敗";
+        }
+
+        // 取得某日匯率
+        [HttpPost]
+        [ActionName("getExchangeData")]
+        public dynamic getExchangeData([FromBody] dynamic value)
+        {
+            try
+            {
+                var res = GetExchangeRates();
+                string date = value.exchangeDate;
+                date = date.Replace("/", "");
+
+                List<exchangeRatesVM> ResList = new List<exchangeRatesVM>();
+
                 res.ForEach(x =>
                 {
-                    currencyVM Res = new currencyVM();
-                    Res.currencyId = x.currencyId;
-                    Res.currencyName = x.currencyName;
-                    ResList.Add(Res);
+                    if (x.lastUpdateTime.Substring(0, 8) == date) ResList.Add(x);
                 });
 
+                if (ResList.Count == 0) return "查無資料";
                 return ResList;
             }
-
-            // 新增&修改幣別
-            if (value?.currencyId != null && value?.currencyName != null)
+            catch
             {
-                bool checkExist = true;
-                var res = GetList();
-                // 修改
-                res.ForEach(x =>
-                {
-                    if (value?.currencyId == x.currencyId.Trim())
-                    {
-                        checkExist = false;
-                    }
-                });
-                if (!checkExist)
-                {
-                    string UpdateCurrencyId = value.currencyId;
-                    string UpdateCurrencyName = value.currencyName;
-                    UpdateList(UpdateCurrencyId, UpdateCurrencyName);
-                } 
-                // 新增
-                if (checkExist)
-                {
-                    string UpdateCurrencyId = value.currencyId;
-                    string UpdateCurrencyName = value.currencyName;
-                    InsertList(UpdateCurrencyId, UpdateCurrencyName);
-                }
-
-                return true;
+                return "輸入有誤";
             }
-
-            // 刪除幣別
-            if (value?.currencyId != null && value?.currencyName == null)
-            {
-                int removwIndex = 0;
-                bool removeFlag = false;
-                var res = GetList();
-                res.ForEach(x =>
-                {
-                    if (value?.currencyId == x.currencyId.Trim())
-                    {
-                        removeFlag = true;
-                    }
-                });
-                if (removeFlag) 
-                {
-                    string UpdateCurrencyId = value.currencyId;
-                    DeleteList(UpdateCurrencyId);
-                }
-                return true;
-            }
-
-            // 取得某日匯率
-            if (value?.exchangeDate != null)
-            {
-                try
-                {
-                    var res = GetList();
-                    string date = value.exchangeDate;
-                    date = date.Replace("/", "");
-
-                    List<exchangeRatesVM> ResList = new List<exchangeRatesVM>();
-
-                    res.ForEach(x =>
-                    {
-                        if (x.lastUpdateTime.Substring(0, 8) == date) ResList.Add(x);
-                    });
-
-                    if (ResList.Count == 0) return "查無資料";
-                    return ResList;
-                }
-                catch
-                {
-                    return "輸入有誤";
-                }
-
-            }
-            return value;
         }
     }
 }
