@@ -166,7 +166,6 @@ namespace exchangeRate.Controllers
         [ActionName("deleteData")]
         public dynamic deleteData([FromBody] dynamic value)
         {
-            int removwIndex = 0;
             bool removeFlag = false;
             var res = GetCurrency();
             res.ForEach(x =>
